@@ -13,43 +13,58 @@ namespace FlipCoin
             Console.WriteLine("Welcome to Flip Coin Combination Program");
             //CONSTATNTS
             const int HEAD = 1;
+            const int TAIL = 0;
             const int FLIPCOINTIMES = 20;
 
             //VARIABLES
             int i1 = 1;
-            int headCounter = 0;
-            int tailCounter = 0;
-            IDictionary<int, string> singletCombination = new Dictionary<int, string>();
+            int ht_Counter = 0;
+            int th_Counter = 0;
+            int hh_Counter = 0;
+            int tt_Counter = 0;
 
-            while ( i1 <= FLIPCOINTIMES)
+            IDictionary<int, string> doubletCombination = new Dictionary<int, string>();
+
+            while (i1 <= FLIPCOINTIMES)
             {
-                Random random = new Random();
-                int flipCoin = random.Next(0, 2);
-                if (flipCoin == HEAD)
+                Random random1 = new Random();
+                int flipCoin1 = random1.Next(0, 2);
+                Random random2 = new Random();
+                int flipCoin2 = random2.Next(0, 2);
+                switch (flipCoin1, flipCoin2)
                 {
-                    //Console.WriteLine("HEAD");
-                    singletCombination[i1] = "H ";
-                    headCounter++;
-                }
-                else
-                {
-                    //Console.WriteLine("TAIL");
-                    singletCombination[i1] = "T ";
-                    tailCounter++;
+                    case (HEAD, TAIL):
+                        doubletCombination[i1] = "HT ";
+                        ht_Counter++;
+                        break;
+                    case (TAIL, HEAD):
+                        doubletCombination[i1] = "TH ";
+                        th_Counter++;
+                        break;
+                    case (HEAD, HEAD):
+                        doubletCombination[i1] = "HH ";
+                        hh_Counter++;
+                        break;
+                    default:
+                        doubletCombination[i1] = "TT ";
+                        tt_Counter++;
+                        break;
                 }
             i1++;
             }
-            for (int i2 = 1; i2 <= singletCombination.Count; i2++)
+            for (int i2 = 1; i2 <= doubletCombination.Count; i2++)
             {
-                Console.Write(singletCombination[i2]);
+                Console.Write(doubletCombination[i2]);
             }
             Console.WriteLine();
-            Console.WriteLine($"Perentage of Head Singlet is {(headCounter * 100) / FLIPCOINTIMES}");
-            Console.WriteLine($"Perentage of Tail Singlet is {(tailCounter * 100) / FLIPCOINTIMES}");
-            
+            Console.WriteLine($"Perentage of HH Singlet is {(hh_Counter * 100) / FLIPCOINTIMES}");
+            Console.WriteLine($"Perentage of TT Singlet is {(tt_Counter * 100) / FLIPCOINTIMES}");
+            Console.WriteLine($"Perentage of HT Singlet is {(ht_Counter * 100) / FLIPCOINTIMES}");
+            Console.WriteLine($"Perentage of TH Singlet is {(th_Counter * 100) / FLIPCOINTIMES}");
+
 
             Console.ReadLine();
-        }
+            }
 
+        }
     }
-}
