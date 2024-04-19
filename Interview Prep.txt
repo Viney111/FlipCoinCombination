@@ -1,0 +1,192 @@
+--SQL Performance Optimization Technique
+
+1). Use Indexing (where, orderby,JOIN) Avoid Table Scan whereever possible.
+2). Optimize Joins (Indexing on Join columns, if possible columns should be integers instead of varchars)
+3). Minimise Number of Select columns
+4). Use UNION ALL Instead of UNION, where possible
+5). Distribute the table, on appropriate column (HASH, RANGE, ROUNDROBIN)
+6). Use Query Execution plan in SSMS to track the performance of query.
+
+
+--ADF/Synapse Supports only these types of Files, in datasets (not txt or Gzip): -
+
+✑ Binary format
+✑ Delimited text format
+✑ Excel format
+✑ JSON format
+✑ ORC format
+✑ Parquet format
+✑ XML format
+
+
+--Only these Data Definition Language (DDL) statements are allowed on EXTERNAL tables:
+✑ CREATE TABLE and DROP TABLE
+✑ CREATE STATISTICS and DROP STATISTICS
+✑ CREATE VIEW and DROP VIEW
+
+--Dynamic File Pruning: - At run time, we can recieve the output of certain operations which can assist us in reducing the scanning.
+
+--Question for DP203: - Combination of Row Key and Partition is composite Primary Key in Azure Table Storage.
+
+--Question for DP203: - if json and binary format data is getting streamed then we should use AVRO format (Row oriented) for storing the data instaed of Parquet.
+
+--Masking and unmasking in Azure Synapse SQL Pool could be used for preventing data exposure to users of DB. Datatype of numeric values would return 0 for masked column.
+ALTER TABLE Customers
+ADD MASKED WITH (FUNCTION = 'partial(1, "XXXXXXX", 0)') FOR EmailAddress;
+
+
+--Data Virtualization: - Instaed of copying data from ADLS,IOT,API to SQL Pool DB and then querying it, rather we directly query the data from ADLS,IOT,API by SQL API, this is called data vritualization. For this, we need certain external data objects.
+
+
+--Distribution in Synapse SQL pool table
+60 distributions automatically in Synapse SQL pool.
+1). HASH (Highest Query Performance for joins and aggregations) HASH Algorithm would determine,which row should be gone to which partition.Number of table rows per distribution may vary.
+2). Round-Robin (Easy to load data into this (data would be loaded in sequential manner), but query performance is better with HASH.)
+3). Replicated:- For small tables; All table rows are copied to each compute node for avoiding shuffling of data.
+
+--Partition in Synapse SQL pool table
+
+1). RANGE Partitioning is used to partition table on specified ranges of column values (e.g. dates)
+2). HASH Data is partitioned based on a hash function applied to a specified column, similar to hash distribution.
+
+In summary, distribution determines how data is spread across the nodes for parallel processing, while partitioning divides data within a table or index into manageable segments for improved query performance. They often work together to optimize data storage and query performance in Azure Synapse Analytics SQL Pools.
+
+Having too many partitions can reduce the effectiveness of clustered columnstore indexes if each partition has fewer than 1 million rows. Dedicated SQL pools automatically partition your data into 60 databases. So, if you create a table with 100 partitions, the result will be 6000 partitions. Each workload is different, so the best advice is to experiment with partitioning to see what works best for your workload.
+
+Clustered Column Store index would save storage cost (as it would compress the relevant columns) as well as performance (as we could fetch selected columns instead of whole row from table)
+Clustered Row Store indexes are efficient when we want to have one entire row with specific id BUT for aggregations we should prefer column store indexes.
+
+
+--SQL Pool Architecture in Synapse
+1). Control Node (Entry Point of Query,Runs Parallel query across compute nodes) Generally the query work is divided into 60 smaller queries that run in parallel.
+2). Compute Nodes on which parallel queries are running as data is distributed across these nodes. DTU(Database throughput units)
+3). Data Movement Services (to move the ouput of data across these compute nodes to generate a single output)
+
+
+--Optimization in Spark
+1). Persist or Cache the dataframe that is frequently used
+2). Partitioning the dataframe, on appropriate column
+4). Handle data skewness by SALTING approach and SKEW HINT.
+3). Broadcast variable (read-only copy of small dataset across all worker nodes)
+4). Use Parquet file (columnar storage)
+
+
+--Spark Join strategy (Internally, how joins work in Spark on backend when we apply inner, left, right or any join)
+1). Broadcast Hash Join (when 1 dataframe is small then small dataset is broadcasted across excutors where large table is located --> no shuffling then quickier; default for this is 10 MB)
+2). Shuffle Hash Join (Join tables are partitioned based on join key leading to shuffle of data across partitions, Idea here is that 2 tables have same keys so data required for joins is available in same partition. very expensive as data is shuffled too much. NOTE: - Smaller (out of 2 big tables) table would be hashed IN MEMORY. It could cause OOM Exception error as all thing are happening on in memory.
+3). Sort Merge Join (Default is this in spark, for applying Shuffle hash join we gave to put Sort Merge as False). Default join strategy (as it could use disk space while Shuffle hash join uses in memory space). The data can be written to disk (spill), if data exceeds in-memory size. It has traits from the Map-Reduce programs. 3 phases in it. 1st is shuffle (repartitioned as per join key) 2nd is Sorting (Sorting data within partition parallely) 3rd is merge (Merging sorted and partitioned data)
+
+
+--Spark Pool used in Provana is small with 3 nodes (each node is having 4 cores with 32 GB memory across these 4 cores) Total Memory available = 32*3 = 96 GB
+
+
+--In Apache Spark, processing large datasets (100GB) that exceed the available memory capacity (50GB) THEN Spark would handle it in following way:-
+1). Data Partitioning (Small chunks of overall dataset, independent parallel processing)
+2). Processing in Stages; load one or more partition in memory, performs transformations and then spills intermediate results in disk, if needed.
+3). Disk Spill; if in memory space is less, it would use disk storage for read back
+4). Shuffling:- groupbykey, reducebykey; writing intermediate data to disk for a short period during the shuffle phase.
+
+
+--Significance of _success file in spark
+Job Completion Indicator;Data Consistency Guarantee;Workflow Coordination (could be used for further dependent processes on ETL pipelines)
+
+
+--Spark Architecture
+Driver Program: 	Main Entry Point contains SparkContext 
+Spark Context: 		responsible for coordinating tasks across cluster for resource allocation,represents connection to spark cluster
+Cluster Manager: 	manage resource across cluster e.g. Hadoop YARN; tasks scheduling
+Worker Node: 		Individual machines on cluster; performs actual data processing tasks; Each Worker node runs executor process
+Executor: 		Processes runnig on worker nodes, Run multiple tasks in parallel and communicate with the driver program and Cluster Manager; Cache data in memory or disc
+Task: 			Smallest unit in Spark; Created by SparkContext, executed on worker nodes
+RDD: 			Fundamental DS in Spark
+DAG: 			Sequence of Stages and tasks organised in DAG, perform lazy evaluation, only computing results when an action is triggered.
+DataFrame & Dataset API:higher-level abstractions built on top of RDDs.
+
+--How to handle bad data in Pyspark/Databricks
+Default mode is spark.read.option("mode","PERMISSIVE"); It would read all the bad data in dataset
+we could change the MODE = "FAILFAST" to raise exception or failure to identify that it contains bad data
+MODE = "DROPMALFORMED" could reject the bad data altogether from the Spark dataframe
+option = "badRecordsPath","badrecordsfolderpath" would separate the bad records in this folder in DATABRICKS to help us to backtrack which was the bad data
+columnNameOfCorruptRecord="baddata"; by adding one more column in dataframe; and we could extract good data by filter where baddata column is NULL
+
+--How to handle Performance issues in Spark
+1). Skew(imbalance in the size of data partitions)
+Detection: - Check Summary metrics, aggregated metrics by executors
+Mitigation: - In Spark3, enabling AQE dynamically handle join skews (Adaptive Query Execution);In Databricks, specific SKEW HINT(Skew Join optimization by specifying which column partition is of bigger size in the code itself); Broadcast variable could also be used.(but with cautious as it could consume memory if the tables are big relatively)
+--> KEY SALTING is creating pseudo id for bigger partition id
+2). Spill (writing temp files to disc due to lack of memory)
+3). Shuffle (moving data b/w executors due to wide transformations)
+4). Serialization (distribution of code across clusters matter)
+
+
+--Parallelism in Apache Spark and Azure Synapse SQL Data Warehouse 
+1). Spark Allows parallelism by dividing data into Partition (on different nodes of cluster), while DWH achieves this by data distribution across multiple nodes(each node process its subset data indepently)
+2). Spark uses RDD's (Dataset and dataframes are higher level abstractions) while DWH has tables in it.
+
+
+--DWH vs DataLake vs Deltalake
+DWH supports structured data only (not semi or unstructured), traditional, easier for DML operation, scaling up and down is not easy, costlier
+Datalake supports all three types of data, less costly, store huge amount of data but does not support fully DML; if some process fails then corruped state in system as NO ACID Property
+DeltaLake overcome disadvantges of DWH and Datalake; supports all type of data, ACID Property; easier to perform DML operations.(Reliability, Security and Performance)
+
+
+--Fundamental Architecture of DeltaLake
+1). Json Transaction Log Files (for every transaction) could do "TIME TRAVEL" with these files; 
+2). Parquet checkpointing File (for every 10 json log files); traverse through 1000 (lots of) json transaction files made easy with this checkpointing File (captures current status of file)
+3). CRC (Cyclic Redundant Check) to prevent accidental damage to data for Delta tables.
+
+Delta lake follows "SOFT DELETE" approach (not deleted immidiately, default delete duration is after 7 days, could be changed as per use case); data is still there after delete query but would not show up in tables.
+Delta table instance to be created out of Delta table only, to apply transaformations through Pyspark instead of SQL query
+
+
+--Left Anti Join (to fetch all rows from left table except matched columns from right tables)
+
+
+--ADF, Synaspe Related questions
+
+mssparkutils.notebook.run(NotebookName,1800) --Calling Notebook by this library by passing notebook name.
+
+Schedule vs Tumbling Window Trigger
+1). Tumbling window can work for past (back dates) as well while schedule can't; In Tumbling window trigger, i could get start or end time of Tumbling trigger in system variable.
+2). Dependency can be there in Tumbling
+3). Concurrency 
+4). One Pipeline:- One Tumbling Window Trigger ; many to many in Schedule Trigger
+
+--To cancel the pipeline in the forloop if one activity fails,
+while all processes are running Sequentially, we have to use "WEB Activity" (by posting) by restapi for cancel,to cancel that pipeline
+
+
+--ADLS Gen-2 questions and answers
+1). ACLs define permissions on directories and files within ADLS Gen2.
+2). Hot Tier (Low Latency,Higher cost, frequently accessed data); Cool Tier (Higher Latency,Lower cost, Infrequently accessed data such as backups, Min 30 days storage);Archive Tier (Rarely accessed data, lowest storage costs but highest access cost when needed, Min 180 days storage)
+
+
+--SQL Basics
+
+1). CHAR(10)(Fixed storage = 10, with vacant space padding);VARCHAR(10)(Varibale length character;only occupies necessary space);NVARCHAR(10) Same as varchar but storage space more as it alllows broader range of characters (UTF16)
+
+--Keys
+Primary Key - No NULL Value
+Forgein Key - References to other table's primary key
+Unique key - Same as Primary Key but does allow NULL Values
+Candidate Key - Set of one or more column which could become primary key
+
+
+
+Map- Applies funtion to each single element of rdd
+flatmap- Similar to map, but each input item can be mapped to zero or more output items
+reduce- aggregate the elements of RDD to one value
+
+
+
+--Agile Way of working
+1). In 1990, agile menifesto was made to deliver products faster (work at all scales and across time). In use of non software projects as well (Aeronautical, military, healthcare, finance)
+2). Traditional Product Development focussed on strong documentation. Work is transferred from these documents only (miscommunication across different levels). Agile focuses in-person requirements gathering prior to documentation.
+3). Agile (Continuous cycle; Flexible,continuous evolution; Customer Involvement) VS Waterfall (Sequential/Linear Stages;In depth documentation; for simple,unchanging projects; PM involement)
+4). Qualities of GREAT SOFTWARE PRODUCT: - User Experience;Availability; Performance; Scalability; Adaptibility (Ease with which we could change appp's functionality); Security; Economy
+
+
+
+
+
+
